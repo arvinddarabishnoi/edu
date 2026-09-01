@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand Primary Colors -->
+    <color name="primary_indigo">#6366F1</color>
+    <color name="primary_indigo_dark">#4F46E5</color>
+    <color name="primary_indigo_light">#818CF8</color>
+    
+    <!-- Accent Vibrant Colors -->
+    <color name="accent_cyan">#06B6D4</color>
+    <color name="accent_amber">#F59E0B</color>
+    <color name="accent_emerald">#10B981</color>
+    <color name="accent_rose">#F43F5E</color>
+    <color name="accent_purple">#A855F7</color>
+
+    <!-- Dark Theme Backgrounds -->
+    <color name="bg_dark">#0B0F19</color>
+    <color name="surface_dark">#131B2E</color>
+    <color name="surface_dark_variant">#1E293B</color>
+    <color name="card_dark">#182238</color>
+    <color name="card_stroke_dark">#2B3958</color>
+
+    <!-- Text Colors -->
+    <color name="text_primary">#F8FAFC</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="text_muted">#64748B</color>
+
+    <!-- Subjects -->
+    <color name="subject_physics">#38BDF8</color>
+    <color name="subject_chemistry">#34D399</color>
+    <color name="subject_maths">#FB7185</color>
+</resources>

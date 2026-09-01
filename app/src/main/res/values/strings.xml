@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EDUTOPIA</string>
+    <string name="company_name">MINDNOVA</string>
+    <string name="tagline">Premium JEE Learning &amp; Testing Platform</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_learn">Learn</string>
+    <string name="nav_tests">Tests</string>
+    <string name="nav_rank">Rankings</string>
+    <string name="nav_profile">Profile</string>
+</resources>

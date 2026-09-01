@@ -1,0 +1,48 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="128dp"
+    android:height="128dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <path
+        android:pathData="M24,40 L64,18 L104,40 L64,62 Z"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="18"
+                android:endX="104"
+                android:endY="62"
+                android:type="linear">
+                <item android:color="#4F46E5" android:offset="0.0" />
+                <item android:color="#06B6D4" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="24"
+                android:startY="18"
+                android:endX="104"
+                android:endY="62"
+                android:type="linear">
+                <item android:color="#818CF8" android:offset="0.0" />
+                <item android:color="#38BDF8" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Cap Base & Diploma Scroll -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M36,54 L36,82 C36,98 64,104 64,104 C64,104 92,98 92,82 L92,54 L64,70 Z" />
+    <path
+        android:pathData="M36,54 L36,82 C36,98 64,104 64,104 C64,104 92,98 92,82 L92,54"
+        android:strokeWidth="3.5"
+        android:strokeColor="#6366F1" />
+    <!-- Tassel -->
+    <path
+        android:pathData="M104,40 L108,72 L104,80 L112,80 L108,72"
+        android:strokeWidth="2.5"
+        android:strokeColor="#F59E0B"
+        android:fillColor="#F59E0B" />
+</vector>

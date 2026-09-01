@@ -1,0 +1,47 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="128dp"
+    android:height="128dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <!-- Glow / Background Circle -->
+    <path
+        android:pathData="M64,64m-56,0a56,56 0,1 1,112 0a56,56 0,1 1,-112 0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="64"
+                android:centerY="64"
+                android:gradientRadius="64"
+                android:type="radial">
+                <item android:color="#336366F1" android:offset="0.0" />
+                <item android:color="#000B0F19" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Mindnova Modern Brain/Nova Icon -->
+    <path
+        android:pathData="M38,76 L52,38 L64,68 L76,38 L90,76"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="38"
+                android:startY="38"
+                android:endX="90"
+                android:endY="76"
+                android:type="linear">
+                <item android:color="#06B6D4" android:offset="0.0" />
+                <item android:color="#6366F1" android:offset="0.5" />
+                <item android:color="#A855F7" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Mind Star / Sparkle Accent -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M64,24 L66,32 L74,34 L66,36 L64,44 L62,36 L54,34 L62,32 Z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M92,48 L93.5,54 L99.5,55.5 L93.5,57 L92,63 L90.5,57 L84.5,55.5 L90.5,54 Z" />
+</vector>
