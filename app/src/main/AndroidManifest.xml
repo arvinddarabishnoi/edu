@@ -9,8 +9,8 @@
         android:allowBackup="true"
         android:hardwareAccelerated="true"
         android:icon="@drawable/ic_edutopia_logo"
-        android:label="@string/app_name"
         android:roundIcon="@drawable/ic_edutopia_logo"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Edutopia">
 
@@ -20,28 +20,22 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Edutopia">
-            
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deep linking for Batches and Announcements: edutopia:// and EDUTOPIA:// -->
-            <intent-filter>
+            <!-- Deep links: edutopia://announcements, edutopia://series/{id},
+                 edutopia://lecture/{id}, edutopia://batches,
+                 edutopia://admin/announcements (handled by Navigation Compose).
+                 Schemes are case-insensitive; a single lowercase filter replaces
+                 the previous duplicated EDUTOPIA:// filter. -->
+            <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="edutopia"
-                    android:host="*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="EDUTOPIA"
-                    android:host="*" />
+                <data android:scheme="edutopia" />
             </intent-filter>
 
         </activity>

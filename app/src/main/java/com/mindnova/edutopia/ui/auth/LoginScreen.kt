@@ -16,107 +16,115 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.mindnova.Edutopia.R
+import com.mindnova.edutopia.R
 import com.mindnova.edutopia.core.components.EdutopiaPrimaryButton
 import com.mindnova.edutopia.core.components.EdutopiaTextField
 import com.mindnova.edutopia.core.navigation.Screen
 import com.mindnova.edutopia.core.theme.AccentCyan
+import com.mindnova.edutopia.core.theme.AccentEmerald
+import com.mindnova.edutopia.core.theme.AccentRose
 import com.mindnova.edutopia.core.theme.BackgroundDark
 import com.mindnova.edutopia.core.theme.BrandIndigo
 import com.mindnova.edutopia.core.theme.SurfaceDarkCard
 import com.mindnova.edutopia.core.theme.TextWhiteMuted
 import com.mindnova.edutopia.core.theme.TextWhitePrimary
 import com.mindnova.edutopia.core.theme.TextWhiteSecondary
-import com.mindnova.edutopia.core.utils.Constants
-import com.mindnova.edutopia.data.repository.AuthRepository
-import com.mindnova.edutopia.data.repository.UserRepository
-import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
     navController: NavController,
-    authRepo: AuthRepository = remember { AuthRepository() },
-    userRepo: UserRepository = remember { UserRepository() }
+    viewModel: LoginViewModel = viewModel()
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
-    var resetEmail by remember { mutableStateOf("") }
-    var resetStatusMessage by remember { mutableStateOf<String?>(null) }
 
-    fun handleLogin() {
-        if (email.isBlank() || password.isBlank()) {
-            errorMessage = "Please enter both email and password."
-            return
-        }
-        isLoading = true
-        errorMessage = null
-
-        coroutineScope.launch {
-            val result = authRepo.login(email, password)
-            isLoading = false
-            result.onSuccess { user ->
-                val profileResult = userRepo.getUser(user.uid)
-                val profile = profileResult.getOrNull()
-
-                if (profile == null || profile.name.isBlank() || profile.studentClass.isBlank()) {
-                    navController.navigate(Screen.ProfileSetup.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                } else if (profile.role == Constants.ROLE_SUPER_ADMIN || profile.role == Constants.ROLE_ADMIN) {
-                    navController.navigate(Screen.AdminDashboard.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                } else {
-                    userRepo.updateLastActiveAndStreak(user.uid)
-                    navController.navigate(Screen.StudentHome.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                }
-            }.onFailure { error ->
-                errorMessage = error.localizedMessage ?: "Login failed. Please check your credentials."
+    // One-shot navigation on successful login.
+    LaunchedEffect(state.destination) {
+        when (state.destination) {
+            LoginDestination.ProfileSetup -> navController.navigate(Screen.ProfileSetup.route) {
+                popUpTo(Screen.Login.route) { inclusive = true }
             }
+            LoginDestination.StudentHome -> navController.navigate(Screen.StudentHome.route) {
+                popUpTo(Screen.Login.route) { inclusive = true }
+            }
+            LoginDestination.AdminDashboard -> navController.navigate(Screen.AdminDashboard.route) {
+                popUpTo(Screen.Login.route) { inclusive = true }
+            }
+            LoginDestination.None -> Unit
         }
     }
 
+    LoginScreenContent(
+        state = state,
+        onEmailChange = viewModel::onEmailChange,
+        onPasswordChange = viewModel::onPasswordChange,
+        onSubmit = viewModel::login,
+        onForgotClick = {
+            viewModel.openResetDialog()
+            showForgotPasswordDialog = true
+        },
+        onSignupClick = { navController.navigate(Screen.Signup.route) },
+        dialogOpen = showForgotPasswordDialog,
+        onDismissDialog = { showForgotPasswordDialog = false },
+        onResetEmailChange = viewModel::onResetEmailChange,
+        onSendReset = viewModel::sendPasswordReset
+    )
+}
+
+/**
+ * Stateless login UI. Rendered by instrumented tests with fixed states so the
+ * presentation is verifiable without Firebase.
+ */
+@Composable
+internal fun LoginScreenContent(
+    state: LoginUiState,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onForgotClick: () -> Unit,
+    onSignupClick: () -> Unit,
+    dialogOpen: Boolean,
+    onDismissDialog: () -> Unit,
+    onResetEmailChange: (String) -> Unit,
+    onSendReset: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF131127),
-                        BackgroundDark,
-                        Color.Black
-                    )
+                    colors = listOf(Color(0xFF131127), BackgroundDark, Color.Black)
                 )
             )
             .imePadding()
@@ -156,11 +164,15 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             EdutopiaTextField(
-                value = email,
-                onValueChange = { email = it; errorMessage = null },
+                value = state.email,
+                onValueChange = onEmailChange,
                 placeholder = "Enter your email",
                 label = "Email Address",
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                errorMessage = state.emailError,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next
+                ),
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Email,
@@ -174,13 +186,19 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             EdutopiaTextField(
-                value = password,
-                onValueChange = { password = it; errorMessage = null },
+                value = state.password,
+                onValueChange = onPasswordChange,
                 placeholder = "Enter your password",
                 label = "Password",
                 isPassword = true,
-                errorMessage = errorMessage,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                errorMessage = state.passwordError ?: state.generalError,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { if (!state.isSubmitting) onSubmit() }
+                ),
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Lock,
@@ -202,11 +220,10 @@ fun LoginScreen(
                     color = AccentCyan,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable {
-                        resetEmail = email
-                        resetStatusMessage = null
-                        showForgotPasswordDialog = true
-                    }
+                    modifier = Modifier
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                        .clickable(onClick = onForgotClick)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
 
@@ -214,15 +231,14 @@ fun LoginScreen(
 
             EdutopiaPrimaryButton(
                 text = "Sign In",
-                onClick = { handleLogin() },
-                isLoading = isLoading
+                onClick = onSubmit,
+                isLoading = state.isSubmitting,
+                enabled = !state.isSubmitting
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Don't have an account?",
                     color = TextWhiteMuted,
@@ -234,9 +250,7 @@ fun LoginScreen(
                     color = AccentCyan,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable {
-                        navController.navigate(Screen.Signup.route)
-                    }
+                    modifier = Modifier.clickable(onClick = onSignupClick)
                 )
             }
 
@@ -244,10 +258,9 @@ fun LoginScreen(
         }
     }
 
-    // Forgot Password Dialog
-    if (showForgotPasswordDialog) {
+    if (dialogOpen) {
         AlertDialog(
-            onDismissRequest = { showForgotPasswordDialog = false },
+            onDismissRequest = onDismissDialog,
             containerColor = SurfaceDarkCard,
             title = {
                 Text(
@@ -265,42 +278,49 @@ fun LoginScreen(
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     EdutopiaTextField(
-                        value = resetEmail,
-                        onValueChange = { resetEmail = it },
+                        value = state.resetEmail,
+                        onValueChange = onResetEmailChange,
                         placeholder = "student@example.com",
+                        errorMessage = state.resetError,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
                     )
-                    if (resetStatusMessage != null) {
+                    if (state.resetMessage != null) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = resetStatusMessage!!,
-                            color = AccentCyan,
-                            fontSize = 12.sp
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Email,
+                                contentDescription = null,
+                                tint = AccentEmerald,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = state.resetMessage!!,
+                                color = AccentEmerald,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        if (resetEmail.isNotBlank()) {
-                            coroutineScope.launch {
-                                authRepo.sendPasswordReset(resetEmail)
-                                    .onSuccess {
-                                        resetStatusMessage = "Password reset link sent to $resetEmail"
-                                    }
-                                    .onFailure {
-                                        resetStatusMessage = it.localizedMessage ?: "Failed to send reset link."
-                                    }
-                            }
-                        }
-                    }
+                    onClick = onSendReset,
+                    enabled = !state.isResettingPassword
                 ) {
+                    if (state.isResettingPassword) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = AccentCyan
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                     Text("Send Link", color = AccentCyan, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showForgotPasswordDialog = false }) {
+                TextButton(onClick = onDismissDialog) {
                     Text("Close", color = TextWhiteMuted)
                 }
             }

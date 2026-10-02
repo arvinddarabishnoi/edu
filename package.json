@@ -1,15 +1,15 @@
 {
-  "name": "applet",
+  "name": "edutopia-workspace-status",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Static workspace status page for the EDUTOPIA Android project. Does NOT build or run the Android app.",
+  "main": "app/applet/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
-    "build": "echo 'Build completed'"
+    "start": "node app/applet/server.js",
+    "build": "echo 'No-op: this package only serves a static status page. Build the Android app with: ./gradlew assembleDebug'",
+    "test": "node -e \"require('./app/applet/server.js'); console.log('server module loads cleanly (no Android build performed)')\""
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["edutopia", "android", "status-page"],
+  "author": "MINDNOVA",
   "license": "ISC",
   "dependencies": {
     "express": "^5.2.1"

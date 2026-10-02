@@ -3,13 +3,15 @@ package com.mindnova.edutopia.data.repository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.mindnova.edutopia.core.utils.Constants
+import com.mindnova.edutopia.core.utils.Resource
+import com.mindnova.edutopia.core.utils.listResourceFlow
+import com.mindnova.edutopia.core.utils.wrapFirestoreError
 import com.mindnova.edutopia.data.models.DailyGoal
-import com.mindnova.edutopia.data.models.GoalLecture
-import com.mindnova.edutopia.data.models.GoalTest
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class DailyGoalRepository(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -17,23 +19,52 @@ class DailyGoalRepository(
 
     private val dailyGoalsCollection = firestore.collection(Constants.COLL_DAILY_GOALS)
 
-    fun getTodayGoalFlow(): Flow<DailyGoal?> = callbackFlow {
-        val query = dailyGoalsCollection
-            .whereEqualTo("isActive", true)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(1)
-
-        val listener = query.addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                trySend(fallbackGoal())
-                return@addSnapshotListener
-            }
-            val goal = snapshot?.documents?.firstOrNull()?.let { doc ->
+    /**
+     * Streams today's goal, falling back to the most recent active goal.
+     * An empty database yields [Resource.Empty] (the UI shows "no goal set"),
+     * never fabricated placeholder content.
+     */
+    fun getTodayGoalFlow(): Flow<Resource<DailyGoal>> {
+        val todayKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(System.currentTimeMillis())
+        return dailyGoalsCollection
+            .orderBy("dateKey", Query.Direction.DESCENDING)
+            .limit(10)
+            .listResourceFlow { doc ->
                 doc.toObject(DailyGoal::class.java)?.copy(id = doc.id)
-            } ?: fallbackGoal()
-            trySend(goal)
+            }
+            .map { resource ->
+                when (resource) {
+                    is Resource.Success -> {
+                        val todays = resource.data.firstOrNull { it.dateKey == todayKey && it.isActive }
+                            ?: resource.data.firstOrNull { it.isActive }
+                        if (todays == null) Resource.Empty() else Resource.Success(todays)
+                    }
+                    is Resource.Empty -> Resource.Empty()
+                    else -> resource
+                }
+            }
+    }
+
+    /** All goals, newest first (admin management). */
+    fun getAllGoalsFlow(limit: Long = 50): Flow<Resource<List<DailyGoal>>> =
+        dailyGoalsCollection
+            .orderBy("dateKey", Query.Direction.DESCENDING)
+            .limit(limit)
+            .listResourceFlow { doc ->
+                doc.toObject(DailyGoal::class.java)?.copy(id = doc.id)
+            }
+
+    suspend fun getGoalById(id: String): Result<DailyGoal?> {
+        return try {
+            val doc = dailyGoalsCollection.document(id).get().await()
+            if (doc.exists()) {
+                Result.success(doc.toObject(DailyGoal::class.java)?.copy(id = doc.id))
+            } else {
+                Result.success(null)
+            }
+        } catch (e: Exception) {
+            Result.failure(wrapFirestoreError(e))
         }
-        awaitClose { listener.remove() }
     }
 
     suspend fun saveDailyGoal(goal: DailyGoal): Result<String> {
@@ -46,32 +77,16 @@ class DailyGoalRepository(
             docRef.set(goal.copy(id = docRef.id)).await()
             Result.success(docRef.id)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(wrapFirestoreError(e))
         }
     }
 
-    private fun fallbackGoal(): DailyGoal {
-        return DailyGoal(
-            id = "fallback",
-            dateKey = "today",
-            lecture = GoalLecture(
-                id = "default_lec",
-                title = "Rotational Motion — Lecture 12",
-                subject = "Physics",
-                chapter = "Rotational Motion",
-                description = "Moment of Inertia & Parallel Axis Theorem with JEE Advanced Problem Solving",
-                videoUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                duration = "52 mins"
-            ),
-            test = GoalTest(
-                id = "default_test",
-                title = "JEE Main Full Syllabus AITS — Test 08",
-                totalQuestions = 75,
-                durationMinutes = 180,
-                scheduledStartTime = "7:00 PM",
-                status = "Available"
-            ),
-            isActive = true
-        )
+    suspend fun deleteDailyGoal(id: String): Result<Unit> {
+        return try {
+            dailyGoalsCollection.document(id).delete().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(wrapFirestoreError(e))
+        }
     }
 }

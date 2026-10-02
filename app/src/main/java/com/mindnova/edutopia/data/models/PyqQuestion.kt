@@ -20,7 +20,28 @@ data class PyqQuestion(
     val explanation: String = "",
     val marks: Int = 4,
     val negativeMarks: Int = 1,
+    /** Number of distinct students who have answered this PYQ at least once. */
     val solvedCount: Long = 0L,
+    /** Total submissions across all students (attempts, including repeats). */
+    val totalAttempts: Long = 0L,
+    /** Submissions that matched the correct answer. */
+    val totalCorrect: Long = 0L,
+    /** Denormalized accuracy in percent, maintained atomically with attempts. */
     val accuracy: Double = 0.0,
     val createdAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Per-user attempt record for a PYQ, stored at pyqs/{pyqId}/attemptors/{uid}.
+ * Used to keep solved-count, XP and accuracy updates idempotent.
+ */
+@IgnoreExtraProperties
+data class PyqAttemptor(
+    @DocumentId
+    val uid: String = "",
+    val attempts: Long = 0L,
+    val correctAttempts: Long = 0L,
+    val firstSolvedAt: Long = 0L,
+    val lastAttemptAt: Long = 0L,
+    val xpAwarded: Boolean = false
 )

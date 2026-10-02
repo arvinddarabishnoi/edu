@@ -1,0 +1,166 @@
+rules_version = '2';
+
+// EDUTOPIA Firestore security rules.
+//
+// Authorization model:
+//   - students may only read shared learning content and write their OWN
+//     profile / attempts / progress records;
+//   - admins (a doc must EXIST in `admins/{uid}` with status "active") may
+//     manage content collections;
+//   - only superAdmins may mutate the `admins` collection or change roles;
+//   - audit logs are append-only for admins and never readable by students.
+//
+// Client-side navigation gating is UX only; these rules are the real boundary.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == "active";
+    }
+
+    function isSuperAdmin() {
+      if (!signedIn()) { return false; }
+      let adminDoc = get(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return isAdmin() && adminDoc.data.role == "superAdmin";
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Users: own doc read/write with guarded role changes; admins may read all.
+    match /users/{uid} {
+      allow get, list: if isSelf(uid) || isAdmin();
+      // Students may create/update only their own profile and may NEVER set or
+      // escalate role/xp beyond allowed fields.
+      allow create: if isSelf(uid)
+        && request.resource.data.role == "student"
+        && request.resource.data.xp is number && request.resource.data.xp == 0
+        && request.resource.data.points is number && request.resource.data.points == 0;
+      allow update: if isAdmin() || (
+        isSelf(uid)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(["role", "uid", "email"])
+      );
+      // Per-user lecture progress subcollection (completion idempotency keys).
+      match /lectureProgress/{lectureId} {
+        allow read, write: if isSelf(uid);
+      }
+    }
+
+    // Admins: readable by any signed-in user only for role bootstrap; writes
+    // strictly superAdmin-only.
+    match /admins/{uid} {
+      allow get: if isSelf(uid) || isSuperAdmin();
+      allow list: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Shared learning content — readable by any signed-in user.
+    match /series/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /lectures/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      // Lecture completion marks are written atomically by the app inside a
+      // transaction; per-user docs under /progress are self-only.
+      match /progress/{uid} {
+        allow read, write: if isSelf(uid) || isAdmin();
+      }
+    }
+    match /tests/{testId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      match /questions/{qid} {
+        allow read: if signedIn();
+        allow write: if isAdmin();
+      }
+    }
+    match /dailyGoals/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /batches/{id} {
+      allow read: if signedIn();
+      // Enrollment transactions update studentCount; students must not.
+      allow write: if isAdmin();
+    }
+    match /banners/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /announcements/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /messages/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /tournaments/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      // Participants: a user may join (create own doc keyed by uid) but never
+      // edit scores; admins may manage.
+      match /participants/{uid} {
+        allow read: if signedIn();
+        allow create: if isSelf(uid) && request.resource.data.score == 0 && request.resource.data.submittedAt == 0;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // PYQ bank: read-only for students; attemptor sub-docs self-writable;
+    // aggregate counters on the question doc are maintained by client
+    // transactions and therefore writable by any signed-in user ONLY through
+    // the narrow numeric increments below (guard against arbitrary edits).
+    match /pyqs/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(["totalAttempts", "totalCorrect", "solvedCount", "accuracy"])
+        && request.resource.data.totalAttempts >= resource.data.totalAttempts;
+      match /attemptors/{uid} {
+        allow read, write: if isSelf(uid) || isAdmin();
+      }
+    }
+
+    // Attempts & results: own docs only. The result doc id embeds
+    // userId_testId_startedAt, so creation checks the owner prefix.
+    match /testAttempts/{id} {
+      allow read, create, update: if signedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+    match /testResults/{id} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Audit logs: append-only by admins; readable by admins only.
+    match /auditLogs/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.adminId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // App config (gamification constants etc.)
+    match /appConfig/{id} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // Everything else is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

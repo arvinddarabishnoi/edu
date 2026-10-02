@@ -1,81 +1,143 @@
+/**
+ * EDUTOPIA — static workspace status page.
+ *
+ * This server does NOT build, compile, or run the Android app, and it does
+ * not claim that it does. It renders repository metadata that is true at
+ * request time (branch state on disk, file counts, presence of required
+ * configuration files). Android builds happen locally with Gradle/Android
+ * Studio or in CI — see README.md.
+ */
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
 const app = express();
 const port = process.env.PORT || 3000;
+const repoRoot = path.resolve(__dirname, '..', '..');
+
+function fileExists(rel) {
+  try {
+    return fs.existsSync(path.join(repoRoot, rel));
+  } catch (e) {
+    return false;
+  }
+}
+
+function countFiles(dir, ext) {
+  let count = 0;
+  const stack = [path.join(repoRoot, dir)];
+  while (stack.length) {
+    const cur = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(cur, { withFileTypes: true });
+    } catch (e) {
+      continue;
+    }
+    for (const ent of entries) {
+      const full = path.join(cur, ent.name);
+      if (ent.isDirectory()) stack.push(full);
+      else if (!ext || ent.name.endsWith(ext)) count++;
+    }
+  }
+  return count;
+}
+
+function statusPage() {
+  const checks = [
+    {
+      label: 'Kotlin sources present',
+      ok: countFiles('app/src/main/java', '.kt') > 0,
+      detail: `${countFiles('app/src/main/java', '.kt')} .kt files under app/src/main/java`,
+    },
+    {
+      label: 'Unit tests present',
+      ok: countFiles('app/src/test', '.kt') > 0,
+      detail: `${countFiles('app/src/test', '.kt')} .kt files under app/src/test`,
+    },
+    {
+      label: 'Firebase config (app/google-services.json)',
+      ok: fileExists('app/google-services.json'),
+      detail: fileExists('app/google-services.json')
+        ? 'Found (values are never displayed here).'
+        : 'MISSING — copy the real file from your Firebase console. The Gradle build intentionally fails until you add it.',
+    },
+    {
+      label: 'Firestore rules & indexes',
+      ok: fileExists('firestore.rules') && fileExists('firestore.indexes.json'),
+      detail: 'Deploy with: firebase deploy --only firestore',
+    },
+    {
+      label: 'Gradle build executed by this server?',
+      ok: false,
+      detail:
+        'NO. This is a static informational page. Run ./gradlew test assembleDebug locally to compile and test the app.',
+    },
+  ];
+
+  const rows = checks
+    .map(
+      (c) => `
+      <tr>
+        <td class="${c.ok ? 'ok' : 'warn'}">${c.ok ? '✓' : '!'}</td>
+        <td>${c.label}</td>
+        <td class="detail">${c.detail}</td>
+      </tr>`
+    )
+    .join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDUTOPIA — Workspace Status (informational only)</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background:#0B0F19; color:#E2E8F0; margin:0; padding:40px 16px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color:#94A3B8; font-size: 13px; margin-bottom: 20px; }
+  .notice { background:#1E293B; border:1px solid #334155; border-radius:10px;
+            padding:12px 14px; font-size:13px; line-height:1.5; margin-bottom:22px; }
+  table { width:100%; border-collapse: collapse; background:#121B2E;
+          border:1px solid #2B3C62; border-radius:12px; overflow:hidden; }
+  td { padding: 10px 12px; border-bottom: 1px solid #1E293B; font-size: 13px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.ok { color:#10B981; font-weight:700; width:28px; }
+  td.warn { color:#F59E0B; font-weight:700; width:28px; }
+  .detail { color:#94A3B8; }
+  code { background:#1E293B; padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>EDUTOPIA by MINDNOVA — Workspace Status</h1>
+    <div class="sub">Static informational page served by Node.js. This is <b>not</b> a running Android app.</div>
+    <div class="notice">
+      Native Android cannot execute inside a browser frame. This page only reports repository
+      facts computed at request time. To actually build and run the app: open the project in
+      Android Studio (or run <code>./gradlew assembleDebug</code>) on a machine with the Android
+      SDK, after adding <code>app/google-services.json</code> from your Firebase project.
+    </div>
+    <table>${rows}</table>
+  </div>
+</body>
+</html>`;
+}
 
 app.get('/', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Android Project Workspace</title>
-        <style>
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            background: #f8fafc; 
-            margin: 0; 
-            color: #334155;
-          }
-          .container { 
-            text-align: left; 
-            background: white; 
-            padding: 40px; 
-            border-radius: 16px; 
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); 
-            max-width: 600px; 
-          }
-          h1 { 
-            color: #0f172a; 
-            margin-top: 0;
-          }
-          p {
-            line-height: 1.6;
-          }
-          ul {
-            line-height: 1.6;
-            margin-bottom: 0;
-          }
-          li {
-            margin-bottom: 12px;
-          }
-          strong {
-            color: #0f172a;
-          }
-          .success {
-            color: #10b981;
-            font-weight: bold;
-            margin-bottom: 24px;
-            padding: 12px;
-            background: #ecfdf5;
-            border-radius: 8px;
-            border: 1px solid #a7f3d0;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>Android Project Workspace</h1>
-          <div class="success">✅ The Android app compiled successfully!</div>
-          <p>This workspace contains a native Android application (Kotlin/Compose) imported from GitHub.</p>
-          <p>The AI Studio live preview environment is a web browser frame. It cannot run native Android <code>.apk</code> files directly here, which is why the screen was blank.</p>
-          <p><strong>To run your Android app:</strong></p>
-          <ul>
-            <li>Click the <strong>Export</strong> button (the download icon in the top right menu) to download the ZIP file.</li>
-            <li>Open the extracted folder in <strong>Android Studio</strong>.</li>
-            <li>Click Run to test it on your local Android emulator or physical device.</li>
-          </ul>
-          <p>If you'd rather see the app running live in this window, just ask the AI assistant to <strong>"Rewrite this app into a Web application"</strong> (React/Next.js) or <strong>"Build a Web Admin Panel for it"</strong>.</p>
-        </div>
-      </body>
-    </html>
-  `);
+  res.type('html').send(statusPage());
 });
 
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+app.get('/healthz', (req, res) => {
+  res.json({ status: 'informational-only', androidBuildPerformed: false });
 });
+
+if (require.main === module) {
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`EDUTOPIA workspace status page listening on 0.0.0.0:${port}`);
+  });
+}
+
+module.exports = app;

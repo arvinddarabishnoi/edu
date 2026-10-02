@@ -3,10 +3,11 @@ package com.mindnova.edutopia.data.repository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.mindnova.edutopia.core.utils.Constants
+import com.mindnova.edutopia.core.utils.Resource
+import com.mindnova.edutopia.core.utils.listResourceFlow
+import com.mindnova.edutopia.core.utils.wrapFirestoreError
 import com.mindnova.edutopia.data.models.Announcement
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class AnnouncementRepository(
@@ -15,20 +16,13 @@ class AnnouncementRepository(
 
     private val announcementsCollection = firestore.collection(Constants.COLL_ANNOUNCEMENTS)
 
-    fun getAnnouncementsFlow(): Flow<List<Announcement>> = callbackFlow {
-        val query = announcementsCollection.orderBy("createdAt", Query.Direction.DESCENDING)
-        val listener = query.addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                trySend(emptyList())
-                return@addSnapshotListener
-            }
-            val list = snapshot?.documents?.mapNotNull { doc ->
+    fun getAnnouncementsFlow(): Flow<Resource<List<Announcement>>> =
+        announcementsCollection
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(50)
+            .listResourceFlow { doc ->
                 doc.toObject(Announcement::class.java)?.copy(id = doc.id)
-            } ?: emptyList()
-            trySend(list)
-        }
-        awaitClose { listener.remove() }
-    }
+            }
 
     suspend fun createAnnouncement(announcement: Announcement): Result<String> {
         return try {
@@ -40,7 +34,7 @@ class AnnouncementRepository(
             docRef.set(announcement.copy(id = docRef.id)).await()
             Result.success(docRef.id)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(wrapFirestoreError(e))
         }
     }
 
@@ -49,7 +43,7 @@ class AnnouncementRepository(
             announcementsCollection.document(id).delete().await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(wrapFirestoreError(e))
         }
     }
 }

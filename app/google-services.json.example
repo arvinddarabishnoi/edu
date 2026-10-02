@@ -1,0 +1,30 @@
+{
+  "_comment": "TEMPLATE ONLY — never commit the real file. Download the genuine google-services.json from your Firebase project (Project settings → Your apps → Android app with package name com.mindnova.edutopia) and save it as app/google-services.json. Values below are placeholders and will NOT authenticate.",
+  "project_info": {
+    "project_number": "REPLACE_WITH_FIREBASE_PROJECT_NUMBER",
+    "project_id": "REPLACE_WITH_FIREBASE_PROJECT_ID",
+    "storage_bucket": "REPLACE_WITH_FIREBASE_PROJECT_ID.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "REPLACE_WITH_FIREBASE_ANDROID_APP_ID",
+        "android_client_info": {
+          "package_name": "com.mindnova.edutopia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "REPLACE_WITH_FIREBASE_API_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

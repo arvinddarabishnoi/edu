@@ -3,10 +3,12 @@ package com.mindnova.edutopia.data.repository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.mindnova.edutopia.core.utils.Constants
+import com.mindnova.edutopia.core.utils.Resource
+import com.mindnova.edutopia.core.utils.listResourceFlow
+import com.mindnova.edutopia.core.utils.wrapFirestoreError
 import com.mindnova.edutopia.data.models.BannerItem
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
 class BannerRepository(
@@ -15,38 +17,28 @@ class BannerRepository(
 
     private val bannersCollection = firestore.collection(Constants.COLL_BANNERS)
 
-    fun getActiveBannersFlow(): Flow<List<BannerItem>> = callbackFlow {
-        val query = bannersCollection
+    /** Active banners in the current date window (date filtering is client-side). */
+    fun getActiveBannersFlow(): Flow<Resource<List<BannerItem>>> =
+        bannersCollection
             .whereEqualTo("active", true)
             .orderBy("priority", Query.Direction.DESCENDING)
-
-        val listener = query.addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                trySend(emptyList())
-                return@addSnapshotListener
-            }
-            val list = snapshot?.documents?.mapNotNull { doc ->
+            .listResourceFlow { doc ->
                 doc.toObject(BannerItem::class.java)?.copy(id = doc.id)
-            } ?: emptyList()
-            trySend(list)
-        }
-        awaitClose { listener.remove() }
-    }
-
-    fun getAllBannersFlow(): Flow<List<BannerItem>> = callbackFlow {
-        val listener = bannersCollection.orderBy("priority", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                val list = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(BannerItem::class.java)?.copy(id = doc.id)
-                } ?: emptyList()
-                trySend(list)
             }
-        awaitClose { listener.remove() }
-    }
+            .map { resource ->
+                if (resource is Resource.Success) {
+                    val now = System.currentTimeMillis()
+                    val visible = resource.data.filter { it.startDate <= now && it.endDate >= now }
+                    if (visible.isEmpty()) Resource.Empty() else Resource.Success(visible)
+                } else resource
+            }
+
+    fun getAllBannersFlow(): Flow<Resource<List<BannerItem>>> =
+        bannersCollection
+            .orderBy("priority", Query.Direction.DESCENDING)
+            .listResourceFlow { doc ->
+                doc.toObject(BannerItem::class.java)?.copy(id = doc.id)
+            }
 
     suspend fun saveBanner(banner: BannerItem): Result<String> {
         return try {
@@ -58,7 +50,7 @@ class BannerRepository(
             docRef.set(banner.copy(id = docRef.id)).await()
             Result.success(docRef.id)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(wrapFirestoreError(e))
         }
     }
 
@@ -67,7 +59,7 @@ class BannerRepository(
             bannersCollection.document(id).delete().await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(wrapFirestoreError(e))
         }
     }
 }

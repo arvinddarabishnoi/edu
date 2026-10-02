@@ -55,20 +55,31 @@ private val LightColorScheme = lightColorScheme(
     onError = TextWhitePrimary
 )
 
+/**
+ * The app is dark-first (premium coaching aesthetic). Status/nav bar appearance
+ * is aligned with the scheme; MainActivity uses enableEdgeToEdge() so content
+ * draws behind system bars and screens apply their own insets.
+ */
 @Composable
 fun EdutopiaTheme(
-    darkTheme: Boolean = true, // Default to deep dark pro aesthetic
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    // Edutopia ships a hand-tuned dark palette; keep it regardless of OS toggle
+    // so brand visuals stay consistent (a deliberate product decision).
+    val colorScheme = DarkColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
+            val activity = view.context as? Activity ?: return@SideEffect
+            val window = activity.window
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
+            }
+            @Suppress("DEPRECATION")
             window.statusBarColor = colorScheme.background.toArgb()
-            window.navigationBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
 

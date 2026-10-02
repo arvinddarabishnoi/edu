@@ -69,21 +69,28 @@ data class TestResult(
     val testTitle: String = "",
     val testCategory: String = "",
     val score: Int = 0,
-    val maxScore: Int = 300,
+    val maxScore: Int = 0,
     val accuracy: Double = 0.0,
     val correctCount: Int = 0,
     val incorrectCount: Int = 0,
     val unattemptedCount: Int = 0,
-    val totalQuestions: Int = 75,
+    val totalQuestions: Int = 0,
     val timeSpentSeconds: Long = 0L,
+    // Official percentile/rank are NOT computed client-side. They remain 0.0/0
+    // until a trusted dataset (all attempts) provides them. The UI must label
+    // any estimate explicitly as "estimated".
     val percentile: Double = 0.0,
-    val rank: Long = 1L,
-    val xpEarned: Long = 100L,
-    val pointsEarned: Long = 50L,
+    val rank: Long = 0L,
+    val xpEarned: Long = 0L,
+    val pointsEarned: Long = 0L,
     val physicsScore: SubjectPerformance = SubjectPerformance("Physics"),
     val chemistryScore: SubjectPerformance = SubjectPerformance("Chemistry"),
     val mathsScore: SubjectPerformance = SubjectPerformance("Mathematics"),
     val weakTopicsIdentified: List<String> = emptyList(),
+    /** questionId -> chosen option, kept so the Review screen can show the student's answer. */
+    val answers: Map<String, String> = emptyMap(),
+    /** Deterministic idempotency key: "{userId}_{testId}_{attemptId}". */
+    val submissionKey: String = "",
     val submittedAt: Long = System.currentTimeMillis()
 )
 
@@ -91,7 +98,7 @@ data class TestResult(
 data class SubjectPerformance(
     val subject: String = "",
     val score: Int = 0,
-    val maxScore: Int = 100,
+    val maxScore: Int = 0,
     val correctCount: Int = 0,
     val incorrectCount: Int = 0,
     val unattemptedCount: Int = 0,

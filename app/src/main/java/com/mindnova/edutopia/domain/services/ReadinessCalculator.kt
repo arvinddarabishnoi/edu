@@ -4,96 +4,130 @@ import com.mindnova.edutopia.data.models.TestResult
 import com.mindnova.edutopia.data.models.User
 import kotlin.math.roundToInt
 
+/**
+ * Student readiness insight. IMPORTANT semantics:
+ *  - This is an ESTIMATED learning insight, never an official exam percentile.
+ *  - With insufficient data the result carries hasEnoughData = false and the
+ *    UI must render "Not enough data yet" plus guidance — no fabricated subjects.
+ *  - Strong/weak subject analysis requires MIN_TESTS_FOR_INSIGHTS actual test
+ *    results; before that no subject claims are made at all.
+ */
 data class JeeReadiness(
+    val hasEnoughData: Boolean,
     val readinessLevel: Int,
     val readinessPercentage: Int,
-    val strongSubject: String,
-    val strongSubjectAccuracy: Int,
-    val needsImprovementSubject: String,
-    val needsImprovementAccuracy: Int,
+    val strongSubject: String?,
+    val strongSubjectAccuracy: Int?,
+    val needsImprovementSubject: String?,
+    val needsImprovementAccuracy: Int?,
     val weakTopics: List<String>,
     val testCount: Int,
     val totalLecturesWatched: Int,
-    val totalPyqsSolved: Int
+    val totalPyqsSolved: Int,
+    val missingDataHints: List<String>
 )
 
 object ReadinessCalculator {
 
-    /**
-     * Calculates JEE Readiness level and percentage score based on test history,
-     * PYQ practice, lecture engagement, and consistency.
-     */
+    const val MIN_TESTS_FOR_INSIGHTS = 2
+    const val TESTS_WEIGHT = 0.40
+    const val PYQ_WEIGHT = 0.25
+    const val LECTURE_WEIGHT = 0.20
+    const val STREAK_WEIGHT = 0.15
+    const val PYQS_FOR_FULL_PYQ_SCORE = 40
+    const val LECTURES_FOR_FULL_SCORE = 25
+    const val STREAK_DAYS_FOR_FULL_SCORE = 10
+
     fun calculateReadiness(
         user: User,
-        testResults: List<TestResult>,
-        defaultWeakTopics: List<String> = listOf("Rotational Motion", "Integration", "Coordination Compounds")
+        testResults: List<TestResult>
     ): JeeReadiness {
-        if (testResults.isEmpty()) {
-            val basePercentage = ((user.lecturesWatched * 3 + user.pyqsSolved * 2).coerceIn(15, 60))
-            val baseLevel = (basePercentage / 5).coerceAtLeast(1)
+        val submittedResults = testResults.filter { it.totalQuestions > 0 }
+        val hasEnoughData = submittedResults.size >= MIN_TESTS_FOR_INSIGHTS
+
+        val missingHints = buildList {
+            if (submittedResults.size < MIN_TESTS_FOR_INSIGHTS) {
+                add("Take ${MIN_TESTS_FOR_INSIGHTS - submittedResults.size} more full-length test(s)")
+            }
+            if (user.pyqsSolved < 10) add("Solve more PYQs (${user.pyqsSolved}/10 recent)")
+            if (user.lecturesWatched < 5) add("Watch a few concept lectures")
+        }
+
+        if (!hasEnoughData) {
             return JeeReadiness(
-                readinessLevel = baseLevel,
-                readinessPercentage = basePercentage,
-                strongSubject = "Physics",
-                strongSubjectAccuracy = 75,
-                needsImprovementSubject = "Mathematics",
-                needsImprovementAccuracy = 58,
-                weakTopics = defaultWeakTopics,
-                testCount = user.testsCompleted,
+                hasEnoughData = false,
+                readinessLevel = 0,
+                readinessPercentage = 0,
+                strongSubject = null,
+                strongSubjectAccuracy = null,
+                needsImprovementSubject = null,
+                needsImprovementAccuracy = null,
+                weakTopics = if (submittedResults.isEmpty()) {
+                    emptyList()
+                } else {
+                    // A single test still yields honest per-topic feedback.
+                    submittedResults.flatMap { it.weakTopicsIdentified }.distinct().take(4)
+                },
+                testCount = submittedResults.size,
                 totalLecturesWatched = user.lecturesWatched,
-                totalPyqsSolved = user.pyqsSolved
+                totalPyqsSolved = user.pyqsSolved,
+                missingDataHints = missingHints
             )
         }
 
-        // Test average accuracy (40% weight)
-        val avgTestAccuracy = testResults.map { it.accuracy }.average().coerceIn(0.0, 100.0)
+        val avgTestAccuracy = submittedResults.map { it.accuracy }.average().coerceIn(0.0, 100.0)
 
-        // Subject averages
-        val physAcc = testResults.map { it.physicsScore.accuracyPercentage }.average()
-        val chemAcc = testResults.map { it.chemistryScore.accuracyPercentage }.average()
-        val mathAcc = testResults.map { it.mathsScore.accuracyPercentage }.average()
+        // Only count subjects that actually appeared in the tests.
+        data class SubAgg(val acc: Double, val samples: Int)
+        val subjectAcc = listOf(
+            "Physics" to submittedResults.map { it.physicsScore }
+                .filter { it.maxScore > 0 || it.correctCount + it.incorrectCount + it.unattemptedCount > 0 },
+            "Chemistry" to submittedResults.map { it.chemistryScore }
+                .filter { it.maxScore > 0 || it.correctCount + it.incorrectCount + it.unattemptedCount > 0 },
+            "Mathematics" to submittedResults.map { it.mathsScore }
+                .filter { it.maxScore > 0 || it.correctCount + it.incorrectCount + it.unattemptedCount > 0 }
+        ).mapNotNull { (name, perfs) ->
+            if (perfs.isEmpty()) return@mapNotNull null
+            val acc = perfs.map { it.accuracyPercentage }.average()
+            name to SubAgg(acc, perfs.size)
+        }
 
-        val subjectAverages = listOf(
-            "Physics" to physAcc,
-            "Chemistry" to chemAcc,
-            "Mathematics" to mathAcc
-        )
-        val strongest = subjectAverages.maxByOrNull { it.second } ?: ("Physics" to 75.0)
-        val weakest = subjectAverages.minByOrNull { it.second } ?: ("Mathematics" to 60.0)
+        val strongest = subjectAcc.maxByOrNull { it.second.acc }
+        val weakest = subjectAcc.minByOrNull { it.second.acc }
 
-        // Pyq score (25% weight)
-        val pyqFactor = (user.pyqsSolved * 2.5).coerceIn(0.0, 100.0)
+        val pyqFactor = (user.pyqsSolved.toDouble() / PYQS_FOR_FULL_PYQ_SCORE * 100.0).coerceIn(0.0, 100.0)
+        val lectureFactor = (user.lecturesWatched.toDouble() / LECTURES_FOR_FULL_SCORE * 100.0).coerceIn(0.0, 100.0)
+        val streakFactor = (user.streak.toDouble() / STREAK_DAYS_FOR_FULL_SCORE * 100.0).coerceIn(0.0, 100.0)
 
-        // Lecture coverage factor (20% weight)
-        val lectureFactor = (user.lecturesWatched * 4.0).coerceIn(0.0, 100.0)
+        val composite = avgTestAccuracy * TESTS_WEIGHT +
+            pyqFactor * PYQ_WEIGHT +
+            lectureFactor * LECTURE_WEIGHT +
+            streakFactor * STREAK_WEIGHT
 
-        // Streak factor (15% weight)
-        val streakFactor = (user.streak * 10.0).coerceIn(0.0, 100.0)
+        val percentage = composite.roundToInt().coerceIn(0, 100)
 
-        val compositeScore = (avgTestAccuracy * 0.40) +
-                (pyqFactor * 0.25) +
-                (lectureFactor * 0.20) +
-                (streakFactor * 0.15)
-
-        val percentage = compositeScore.roundToInt().coerceIn(5, 99)
-        val level = (percentage / 5).coerceAtLeast(1)
-
-        val allWeakTopics = testResults.flatMap { it.weakTopicsIdentified }
-            .distinct()
-            .ifEmpty { defaultWeakTopics }
+        val mergedWeak = submittedResults
+            .flatMap { it.weakTopicsIdentified }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             .take(4)
+            .map { it.key }
 
         return JeeReadiness(
-            readinessLevel = level,
+            hasEnoughData = true,
+            readinessLevel = (percentage / 10).coerceAtLeast(1),
             readinessPercentage = percentage,
-            strongSubject = strongest.first,
-            strongSubjectAccuracy = strongest.second.roundToInt(),
-            needsImprovementSubject = weakest.first,
-            needsImprovementAccuracy = weakest.second.roundToInt(),
-            weakTopics = allWeakTopics,
-            testCount = testResults.size,
+            strongSubject = strongest?.first,
+            strongSubjectAccuracy = strongest?.second?.acc?.roundToInt(),
+            needsImprovementSubject = weakest?.takeIf { it.second.acc < 100.0 }?.first,
+            needsImprovementAccuracy = weakest?.takeIf { it.second.acc < 100.0 }?.second?.acc?.roundToInt(),
+            weakTopics = mergedWeak,
+            testCount = submittedResults.size,
             totalLecturesWatched = user.lecturesWatched,
-            totalPyqsSolved = user.pyqsSolved
+            totalPyqsSolved = user.pyqsSolved,
+            missingDataHints = missingHints
         )
     }
 }

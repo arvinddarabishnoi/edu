@@ -3,10 +3,11 @@ package com.mindnova.edutopia.data.repository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.mindnova.edutopia.core.utils.Constants
+import com.mindnova.edutopia.core.utils.Resource
+import com.mindnova.edutopia.core.utils.listResourceFlow
+import com.mindnova.edutopia.core.utils.wrapFirestoreError
 import com.mindnova.edutopia.data.models.AuditLog
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class AuditLogRepository(
@@ -15,20 +16,13 @@ class AuditLogRepository(
 
     private val auditCollection = firestore.collection(Constants.COLL_AUDIT_LOGS)
 
-    fun getAuditLogsFlow(limit: Long = 100): Flow<List<AuditLog>> = callbackFlow {
-        val query = auditCollection.orderBy("timestamp", Query.Direction.DESCENDING).limit(limit)
-        val listener = query.addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                trySend(emptyList())
-                return@addSnapshotListener
-            }
-            val list = snapshot?.documents?.mapNotNull { doc ->
+    fun getAuditLogsFlow(limit: Long = 100): Flow<Resource<List<AuditLog>>> =
+        auditCollection
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit)
+            .listResourceFlow { doc ->
                 doc.toObject(AuditLog::class.java)?.copy(id = doc.id)
-            } ?: emptyList()
-            trySend(list)
-        }
-        awaitClose { listener.remove() }
-    }
+            }
 
     suspend fun logAction(
         adminId: String,
@@ -53,7 +47,7 @@ class AuditLogRepository(
             docRef.set(entry).await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(wrapFirestoreError(e))
         }
     }
 }
